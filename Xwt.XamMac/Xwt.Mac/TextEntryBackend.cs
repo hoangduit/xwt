@@ -239,7 +239,11 @@ namespace Xwt.Mac
 
 		public override void SetFocus ()
 		{
-			Widget.BecomeFirstResponder ();
+			if (Widget.Window != null && CanGetFocus) {
+				var editor = Widget.Window.FieldEditor (true, Widget);
+				Widget.Window.MakeFirstResponder (Widget.CurrentEditor);
+				Console.WriteLine (Widget.Window.FirstResponder);
+			}
 		}
 		#endregion
 	}
@@ -248,13 +252,23 @@ namespace Xwt.Mac
 	{
 		ITextEntryEventSink eventSink;
 		ApplicationContext context;
-		
+		CustomCell cell;
+
 		public CustomTextField (ITextEntryEventSink eventSink, ApplicationContext context)
 		{
 			this.context = context;
 			this.eventSink = eventSink;
+			this.Cell = cell = new CustomCell {
+				BezelStyle = NSTextFieldBezelStyle.Square,
+				Bezeled = true,
+				DrawsBackground = true,
+				BackgroundColor = NSColor.White,
+				EventSink = eventSink,
+				Context = context,
+				Editable = true,
+			};
 		}
-		
+
 		public NSView View {
 			get {
 				return this;
@@ -272,17 +286,95 @@ namespace Xwt.Mac
 			});
 		}
 
-		int cachedCursorPosition;
-		public override void KeyUp (NSEvent theEvent)
+		class CustomCell : NSTextFieldCell
 		{
-			if (CurrentEditor!= null && cachedCursorPosition != CurrentEditor.SelectedRange.Location) {
-				cachedCursorPosition = (int)CurrentEditor.SelectedRange.Location;
-				context.InvokeUserCode (delegate {
-					eventSink.OnSelectionChanged ();
-				});
+			CustomEditor editor;
+			public ApplicationContext Context {
+				get; set;
 			}
-			base.KeyUp (theEvent);
+
+			public ITextEntryEventSink EventSink {
+				get; set;
+			}
+
+			public CustomCell ()
+			{
+				Console.WriteLine ("Hi");
+			}
+
+			public override NSTextView FieldEditorForView (NSView aControlView)
+			{
+				if (editor == null) {
+					editor = new CustomEditor {
+						Context = this.Context,
+						EventSink = this.EventSink,
+						FieldEditor = true,
+						Editable = true,
+						DrawsBackground = true,
+						BackgroundColor = NSColor.White,
+					};
+				}
+				return editor;
+			}
+		}
+
+		class CustomEditor : NSTextView
+		{
+			public ApplicationContext Context {
+				get; set;
+			}
+
+			public ITextEntryEventSink EventSink {
+				get; set;
+			}
+
+			public CustomEditor ()
+			{
+				Console.WriteLine ("Ho");
+			}
+
+			public override void KeyDown (NSEvent theEvent)
+			{
+				Context.InvokeUserCode (delegate {
+					EventSink.OnKeyPressed (theEvent.ToXwtKeyEventArgs ());
+				});
+				base.KeyDown (theEvent);
+			}
+
+			nint cachedCursorPosition;
+			public override void KeyUp (NSEvent theEvent)
+			{
+				if (cachedCursorPosition != SelectedRange.Location) {
+					cachedCursorPosition = SelectedRange.Location;
+					Context.InvokeUserCode (delegate {
+						EventSink.OnSelectionChanged ();
+						EventSink.OnKeyReleased (theEvent.ToXwtKeyEventArgs ());
+					});
+				}
+				base.KeyUp (theEvent);
+			}
+
+			public override bool BecomeFirstResponder ()
+			{
+				var result = base.BecomeFirstResponder ();
+				if (result) {
+					Context.InvokeUserCode (() => {
+						EventSink.OnGotFocus ();
+					});
+				}
+				return result;
+			}
+
+			public override bool ResignFirstResponder ()
+			{
+				var result = base.ResignFirstResponder ();
+				if (result) {
+					Context.InvokeUserCode (() => {
+						EventSink.OnLostFocus ();
+					});
+				}
+				return result;
+			}
 		}
 	}
 }
-
