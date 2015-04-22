@@ -236,15 +236,6 @@ namespace Xwt.Mac
 				});
 			}
 		}
-
-		public override void SetFocus ()
-		{
-			if (Widget.Window != null && CanGetFocus) {
-				var editor = Widget.Window.FieldEditor (true, Widget);
-				Widget.Window.MakeFirstResponder (Widget.CurrentEditor);
-				Console.WriteLine (Widget.Window.FirstResponder);
-			}
-		}
 		#endregion
 	}
 	
